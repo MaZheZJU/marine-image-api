@@ -56,50 +56,31 @@ def get_default_terms() -> List[str]:
     ]
 
 
-def extract_terms_from_shard(shard_path: str, max_terms: int = 100) -> List[str]:
-    print(f"\n[DEBUG] extract_terms_from_shard received: '{shard_path}'")
-
-    if not os.path.exists(shard_path):
-        print(f"\n[BioCLIP2] Shard file not found: {shard_path}")
+def load_terms_from_txt(terms_path: str, max_terms: int = 1000) -> List[str]:
+    if not os.path.exists(terms_path):
+        print(f"[BioCLIP2] Terms file not found: {terms_path}, using default terms")
         return get_default_terms()
 
-    try:
-        import webdataset as wds
-    except ImportError:
-        print("[BioCLIP2] webdataset not installed, using default terms")
-        return get_default_terms()
+    terms: List[str] = []
+    seen = set()
 
-    terms = set()
-    try:
-        print(f"[BioCLIP2] Extracting terms from {shard_path} using list format")
-        dataset = wds.WebDataset([shard_path])
-
-        for sample in dataset:
-            for key in ["sci.txt", "com.txt", "taxon.txt"]:
-                if key in sample:
-                    try:
-                        term = sample[key].decode("utf-8", errors="ignore").strip()
-                        if term and len(term) < 100:
-                            terms.add(term)
-                    except Exception:
-                        pass
-
-            if len(terms) > max_terms:
+    with open(terms_path, "r", encoding="utf-8") as f:
+        for line in f:
+            term = line.strip()
+            if not term:
+                continue
+            if term not in seen:
+                seen.add(term)
+                terms.append(term)
+            if len(terms) >= max_terms:
                 break
 
-        print(f"[BioCLIP2] Extracted {len(terms)} terms")
-
-        if terms:
-            return list(terms)[:max_terms]
-
-        print("[BioCLIP2] No terms extracted, using default terms")
+    if not terms:
+        print("[BioCLIP2] Terms file is empty, using default terms")
         return get_default_terms()
 
-    except Exception as e:
-        print(f"[BioCLIP2] Error extracting terms: {e}")
-        import traceback
-        traceback.print_exc()
-        return get_default_terms()
+    print(f"[BioCLIP2] Loaded {len(terms)} terms from {terms_path}")
+    return terms
 
 
 def load_bioclip2_text_features(model, terms: List[str], device: str):

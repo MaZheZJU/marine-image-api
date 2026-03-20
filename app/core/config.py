@@ -66,9 +66,9 @@ class Settings:
         "BIOCLIP2_CHECKPOINT",
         "/data/mazhe/training_logs/taxon_v2/taxon_v211/checkpoints/epoch_50.pt",
     )
-    shard_path: str = os.getenv(
-        "SHARD_PATH",
-        "/data/mazhe/webdataset_fixed/shard-000000.tar",
+    bioclip2_terms_path: str = os.getenv(
+        "BIOCLIP2_TERMS_PATH",
+        "/home/mazhe/assets/bioclip2_terms.txt",
     )
 
     def ensure_yolov5_path(self) -> None:
@@ -97,7 +97,7 @@ class Settings:
             "fish_model_path": self.fish_model_path,
             "coral_model_path": self.coral_model_path,
             "bioclip2_checkpoint": self.bioclip2_checkpoint,
-            "shard_path": self.shard_path,
+            "bioclip2_terms_path": self.bioclip2_terms_path,
         }
 
 

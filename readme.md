@@ -2,13 +2,11 @@
 
 一个基于 FastAPI 的海洋图像识别服务，支持：
 
-- 基于 BioCLIP + FAISS 的检索
-- sonar / biological 路由分类
-- sonar 图像分类
-- biological 图像的 fish / coral 二分类
-- fish / coral 对应 detector 推理
-- 可选的 BioCLIP2 生物术语补充
+- 基于 yolo + BioCLIP + FAISS 的检索
 - 多模块结果融合输出
+- 可识别声纳图像和生物图像（鱼类和珊瑚）的检测
+
+本文档介绍如何在本地部署该API服务并使用，以及如何自动化下载需要的所有模型。
 ## 项目结构
 ```text
 app/
@@ -54,14 +52,24 @@ app/
 conda env create -f environment.yml
 conda activate marine-api
 ```
+## 模型下载
+模型文件托管在 Hugging Face 上：
 
+[Marine Image API Models](https://huggingface.co/zhemaxiya/marine-image-api-models)
+
+你可以运行下面的脚本来下载所有模型文件，注意修改脚本中的目标下载地址为你的地址：
+`./scripts/download_assets.py`
+下载命令
+```bash
+python scripts/download_assets.py
+```
 ## 配置环境变量
 
 复制示例文件并修改：
 
 `cp .env.example .env`
 
-然后按你的实际路径填写模型、索引和数据文件路径。
+按你的实际路径填写模型、索引和数据文件路径。
 
 你也可以直接 export 环境变量，例如：
 
@@ -70,9 +78,12 @@ export YOLOV5_DIR=/path/to/yolov5
 export MODEL_DIR=/path/to/models/bioclip
 ```
 ## 启动服务
+完成权重文件的下载，修改好地址后
+进入项目根目录，执行下列命令启动 FastAPI 服务：
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
+端口号8000可根据实际需求更改
 ## API
 #### 健康检查
 ```bash
@@ -88,8 +99,17 @@ POST /predict
 
 * `file`: 图片文件
 
+##### 使用示例：
+在同一个服务器可以使用如下命令，修改要测试的图片地址
+`curl -X POST "http://127.0.0.1:8000/predict" -F "file=@/home/user/path/image.jpg"`
+或者打开服务对应的API地址，例如服务器地址为10.130.x.y,推送端口为8000 则打开http://10.130.x.y:8000/docs
+然后在里面的交互式文档界面上传图片测试接口效果。
 ## 说明
 
-本仓库默认不包含大模型权重、FAISS 索引和数据衍生文件。
+本仓库不包含大模型权重等数据衍生文件，运行需要的模型文件请在[模型下载](#模型下载)获取。
 请根据项目说明自行下载并配置路径。
-## 模型下载
+
+## 后续工作
+- 模型性能优化：尝试更好的训练数据，提高推理精度。
+- FAISS数据库扩充,提高这一阶段的命中率
+- 优化最后 json 的输出格式，目前只是将所有路径的检测结果统一全部输出

@@ -5,9 +5,9 @@ import os
 from app.core.config import settings
 from app.core.state import state
 from app.services.bioclip2_service import (
-    extract_terms_from_shard,
     load_bioclip2_model,
     load_bioclip2_text_features,
+    load_terms_from_txt,
 )
 from app.services.retrieval import load_bioclip, load_index, load_metadata, resolve_device
 from app.services.router import load_router_model
@@ -77,11 +77,14 @@ def load_all_resources() -> None:
         ) = load_bioclip2_model(settings.bioclip2_checkpoint, state.runtime_device)
 
         if state.bioclip2_model is not None:
-            print(f"[DEBUG] SHARD_PATH = '{settings.shard_path}'")
-            print(f"[DEBUG] SHARD_PATH type = {type(settings.shard_path)}")
-            print(f"[DEBUG] File exists: {os.path.exists(settings.shard_path)}")
+            print(f"[DEBUG] BIOCLIP2_TERMS_PATH = '{settings.bioclip2_terms_path}'")
+            print(f"[DEBUG] BIOCLIP2_TERMS_PATH type = {type(settings.bioclip2_terms_path)}")
+            print(f"[DEBUG] File exists: {os.path.exists(settings.bioclip2_terms_path)}")
 
-            state.bioclip2_terms = extract_terms_from_shard(settings.shard_path, max_terms=100)
+            state.bioclip2_terms = load_terms_from_txt(
+                settings.bioclip2_terms_path,
+                max_terms=1000,
+            )
 
             if state.bioclip2_terms:
                 (
@@ -94,7 +97,7 @@ def load_all_resources() -> None:
                 )
                 print(f"[Startup] BioCLIP2 text features computed for {len(state.bioclip2_terms)} terms")
             else:
-                print("[Startup] Warning: No terms extracted for BioCLIP2")
+                print("[Startup] Warning: No terms loaded for BioCLIP2")
         else:
             print("[Startup] Warning: BIOCLIP2_MODEL is None")
 
