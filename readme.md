@@ -104,6 +104,11 @@ POST /predict
 `curl -X POST "http://127.0.0.1:8000/predict" -F "file=@/home/user/path/image.jpg"`
 或者打开服务对应的API地址，例如服务器地址为10.130.x.y,推送端口为8000 则打开http://10.130.x.y:8000/docs
 然后在里面的交互式文档界面上传图片测试接口效果。
+## 测试样例
+具体的图片和对应的测试结果位于`./test_result/`文件夹内,内有一张coral,fish,sonar类型图各一张。
+![](./test_result/coral.jpg)
+<center>测试的coral图片</center>
+
 ## 说明
 
 本仓库不包含大模型权重等数据衍生文件，运行需要的模型文件请在[模型下载](#模型下载)获取。

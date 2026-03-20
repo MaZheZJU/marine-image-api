@@ -1,0 +1,178 @@
+{
+    "success": true,
+    "request_id": "20260320_153323_964a6bfe",
+    "message": "Prediction completed.",
+    "filename": "fish.jpg",
+    "content_type": "image/jpeg",
+    "result": {
+      "success": true,
+      "stage": "bio_fused",
+      "final_result": {
+        "status": "success",
+        "source": "merge_fish_small",
+        "image_type": "fish",
+        "primary_label": "Amphiprion_sp",
+        "all_labels": [
+          "Amphiprion_sp",
+          "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion nigripes",
+          "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion clarkii",
+          "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion mccullochi",
+          "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion percula",
+          "Amphiprion nigripes"
+        ],
+        "confidence": 0.8030036091804504,
+        "display_text": "生物识别结果：Amphiprion_sp",
+        "note": "YOLO result used as primary species prediction. BioCLIP2 terms added as biological-chain support."
+      },
+      "modules": {
+        "retrieval": {
+          "enabled": true,
+          "db_hit": false,
+          "threshold": 0.9,
+          "top1_similarity": 0.2649528980255127,
+          "top1_id": "uatd_00294",
+          "top1_labels": [
+            "ball",
+            "human body"
+          ],
+          "topk": [
+            {
+              "rank": 1,
+              "id": "uatd_00294",
+              "similarity": 0.2649528980255127,
+              "labels": [
+                "ball",
+                "human body"
+              ]
+            },
+            {
+              "rank": 2,
+              "id": "uatd_00295",
+              "similarity": 0.2527908980846405,
+              "labels": [
+                "ball",
+                "human body"
+              ]
+            },
+            {
+              "rank": 3,
+              "id": "uatd_04942",
+              "similarity": 0.2523154020309448,
+              "labels": [
+                "rov"
+              ]
+            },
+            {
+              "rank": 4,
+              "id": "sctd_000021",
+              "similarity": 0.2518329620361328,
+              "labels": [
+                "aircraft"
+              ]
+            },
+            {
+              "rank": 5,
+              "id": "uatd_06517",
+              "similarity": 0.2508842349052429,
+              "labels": [
+                "ball",
+                "human body"
+              ]
+            }
+          ]
+        },
+        "router": {
+          "enabled": true,
+          "predicted_type": "biological",
+          "confidence": 0.9573,
+          "model_name": "best.pt",
+          "raw_top1_label": "other",
+          "raw_top1_confidence": 0.9573,
+          "sonar_probability": 0.0427,
+          "threshold": 0.5
+        },
+        "sonar": null,
+        "fish_coral_classifier": {
+          "model_type": "yolo",
+          "model_name": "fish_coral_cls",
+          "primary_label": "fish",
+          "confidence": 0.9421814680099487,
+          "all_labels": [
+            "coral",
+            "fish"
+          ],
+          "all_probabilities": [
+            0.057818543165922165,
+            0.9421814680099487
+          ]
+        },
+        "fish": {
+          "model_type": "yolo_detector",
+          "model_name": "merge_fish_small",
+          "primary_label": "Amphiprion_sp",
+          "confidence": 0.8030036091804504,
+          "all_labels": [
+            "Amphiprion_sp"
+          ],
+          "detections": [
+            {
+              "label": "Amphiprion_sp",
+              "confidence": 0.8030036091804504
+            }
+          ],
+          "note": "Primary label selected from highest-confidence detection."
+        },
+        "coral": null,
+        "bioclip2": {
+          "model_type": "bioclip2",
+          "matches": [
+            {
+              "term": "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion nigripes",
+              "similarity": 0.3061794638633728
+            },
+            {
+              "term": "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion clarkii",
+              "similarity": 0.30500441789627075
+            },
+            {
+              "term": "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion mccullochi",
+              "similarity": 0.3033618628978729
+            },
+            {
+              "term": "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion percula",
+              "similarity": 0.3024405539035797
+            },
+            {
+              "term": "Amphiprion nigripes",
+              "similarity": 0.29750001430511475
+            }
+          ],
+          "primary_match": {
+            "term": "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion nigripes",
+            "similarity": 0.3061794638633728
+          },
+          "is_fish": true,
+          "is_coral": false,
+          "confidence": 0.3061794638633728
+        },
+        "fusion": {
+          "enabled": true,
+          "coarse_type": "fish",
+          "selected_source": "merge_fish_small",
+          "primary_label": "Amphiprion_sp",
+          "confidence": 0.8030036091804504,
+          "all_labels": [
+            "Amphiprion_sp",
+            "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion nigripes",
+            "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion clarkii",
+            "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion mccullochi",
+            "Animalia > Chordata > Perciformes > Pomacentridae > Amphiprion > Amphiprion percula",
+            "Amphiprion nigripes"
+          ],
+          "reason": "YOLO result used as primary species prediction. BioCLIP2 terms added as biological-chain support.",
+          "display_text": "生物识别结果：Amphiprion_sp",
+          "image_type": "fish"
+        }
+      }
+    }
+  }

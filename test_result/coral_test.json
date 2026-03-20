@@ -1,0 +1,174 @@
+{
+    "success": true,
+    "request_id": "20260320_152946_a42c853a",
+    "message": "Prediction completed.",
+    "filename": "coral.jpg",
+    "content_type": "image/jpeg",
+    "result": {
+      "success": true,
+      "stage": "bio_fused",
+      "final_result": {
+        "status": "success",
+        "source": "Coral_one2",
+        "image_type": "coral",
+        "primary_label": "Millepora Alcicornis",
+        "all_labels": [
+          "Millepora Alcicornis",
+          "Animalia > Cnidaria > Anthozoa > Scleractinia > Acroporidae > Acropora > Acropora cervicornis",
+          "Acropora cervicornis",
+          "Animalia > Cnidaria > Anthozoa > Scleractinia > Pocilloporidae > Seriatopora",
+          "Seriatopora",
+          "Elacatinus oceanops"
+        ],
+        "confidence": 0.4578518271446228,
+        "display_text": "生物识别结果：Millepora Alcicornis",
+        "note": "YOLO result used as primary species prediction. BioCLIP2 terms added as biological-chain support."
+      },
+      "modules": {
+        "retrieval": {
+          "enabled": true,
+          "db_hit": false,
+          "threshold": 0.9,
+          "top1_similarity": 0.3116346001625061,
+          "top1_id": "uatd_05105",
+          "top1_labels": [
+            "rov"
+          ],
+          "topk": [
+            {
+              "rank": 1,
+              "id": "uatd_05105",
+              "similarity": 0.3116346001625061,
+              "labels": [
+                "rov"
+              ]
+            },
+            {
+              "rank": 2,
+              "id": "uatd_04987",
+              "similarity": 0.2957873046398163,
+              "labels": [
+                "rov"
+              ]
+            },
+            {
+              "rank": 3,
+              "id": "uatd_05094",
+              "similarity": 0.2920680344104767,
+              "labels": [
+                "rov"
+              ]
+            },
+            {
+              "rank": 4,
+              "id": "uatd_04989",
+              "similarity": 0.2887871563434601,
+              "labels": [
+                "rov"
+              ]
+            },
+            {
+              "rank": 5,
+              "id": "uatd_05300",
+              "similarity": 0.2839658260345459,
+              "labels": [
+                "rov"
+              ]
+            }
+          ]
+        },
+        "router": {
+          "enabled": true,
+          "predicted_type": "biological",
+          "confidence": 0.9573,
+          "model_name": "best.pt",
+          "raw_top1_label": "other",
+          "raw_top1_confidence": 0.9573,
+          "sonar_probability": 0.0427,
+          "threshold": 0.5
+        },
+        "sonar": null,
+        "fish_coral_classifier": {
+          "model_type": "yolo",
+          "model_name": "fish_coral_cls",
+          "primary_label": "coral",
+          "confidence": 0.9500522613525391,
+          "all_labels": [
+            "coral",
+            "fish"
+          ],
+          "all_probabilities": [
+            0.9500522613525391,
+            0.04994770511984825
+          ]
+        },
+        "fish": null,
+        "coral": {
+          "model_type": "yolo_detector",
+          "model_name": "Coral_one2",
+          "primary_label": "Millepora Alcicornis",
+          "confidence": 0.4578518271446228,
+          "all_labels": [
+            "Millepora Alcicornis"
+          ],
+          "detections": [
+            {
+              "label": "Millepora Alcicornis",
+              "confidence": 0.4578518271446228
+            }
+          ],
+          "note": "Primary label selected from highest-confidence detection."
+        },
+        "bioclip2": {
+          "model_type": "bioclip2",
+          "matches": [
+            {
+              "term": "Animalia > Cnidaria > Anthozoa > Scleractinia > Acroporidae > Acropora > Acropora cervicornis",
+              "similarity": 0.37757354974746704
+            },
+            {
+              "term": "Acropora cervicornis",
+              "similarity": 0.37071162462234497
+            },
+            {
+              "term": "Animalia > Cnidaria > Anthozoa > Scleractinia > Pocilloporidae > Seriatopora",
+              "similarity": 0.31637781858444214
+            },
+            {
+              "term": "Seriatopora",
+              "similarity": 0.2999820411205292
+            },
+            {
+              "term": "Elacatinus oceanops",
+              "similarity": 0.28867587447166443
+            }
+          ],
+          "primary_match": {
+            "term": "Animalia > Cnidaria > Anthozoa > Scleractinia > Acroporidae > Acropora > Acropora cervicornis",
+            "similarity": 0.37757354974746704
+          },
+          "is_fish": false,
+          "is_coral": true,
+          "confidence": 0.37757354974746704
+        },
+        "fusion": {
+          "enabled": true,
+          "coarse_type": "coral",
+          "selected_source": "Coral_one2",
+          "primary_label": "Millepora Alcicornis",
+          "confidence": 0.4578518271446228,
+          "all_labels": [
+            "Millepora Alcicornis",
+            "Animalia > Cnidaria > Anthozoa > Scleractinia > Acroporidae > Acropora > Acropora cervicornis",
+            "Acropora cervicornis",
+            "Animalia > Cnidaria > Anthozoa > Scleractinia > Pocilloporidae > Seriatopora",
+            "Seriatopora",
+            "Elacatinus oceanops"
+          ],
+          "reason": "YOLO result used as primary species prediction. BioCLIP2 terms added as biological-chain support.",
+          "display_text": "生物识别结果：Millepora Alcicornis",
+          "image_type": "coral"
+        }
+      }
+    }
+  }
