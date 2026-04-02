@@ -62,11 +62,79 @@ def build_final_result(
         "note": note,
     }
 
+def normalize_compare_label(label: Optional[str]) -> str:
+    if not label:
+        return ""
+    return str(label).strip().lower().replace(" ", "")
+
+
+def extract_name_from_bioclip_term(term: Optional[str]) -> str:
+    """
+    BioCLIP term 可能是：
+    1) 纯名字: "Colpophyllia Natans"
+    2) 生物链: "Animalia > ... > Colpophyllia natans"
+
+    这里统一提取“最后一个名字”用于比较；
+    如果本身就是纯名字，则直接返回原值。
+    """
+    if not term:
+        return ""
+
+    s = str(term).strip()
+    if not s:
+        return ""
+
+    if ">" in s:
+        parts = [p.strip() for p in s.split(">") if p.strip()]
+        if parts:
+            return parts[-1]
+
+    return s
+
+
+def get_bioclip_topk_matches(
+    bioclip2_result: Optional[Dict[str, Any]],
+    topk: int = 5,
+) -> List[Dict[str, Any]]:
+    if not bioclip2_result:
+        return []
+
+    matches = bioclip2_result.get("matches") or []
+    if not isinstance(matches, list):
+        return []
+
+    return matches[:topk]
+
+
+def yolo_label_in_bioclip_topk(
+    yolo_label: Optional[str],
+    bioclip2_result: Optional[Dict[str, Any]],
+    topk: int = 5,
+) -> bool:
+    yolo_norm = normalize_compare_label(yolo_label)
+    if not yolo_norm:
+        return False
+
+    top_matches = get_bioclip_topk_matches(bioclip2_result, topk=topk)
+
+    for m in top_matches:
+        if not isinstance(m, dict):
+            continue
+
+        term = m.get("term")
+        bioclip_name = extract_name_from_bioclip_term(term)
+        bioclip_norm = normalize_compare_label(bioclip_name)
+
+        if yolo_norm == bioclip_norm:
+            return True
+
+    return False
 
 def fuse_biological_results(
     fish_coral_result: Dict[str, Any],
     yolo_result: Optional[Dict[str, Any]],
     bioclip2_result: Optional[Dict[str, Any]],
+    bioclip_match_topk: int = 5,
 ) -> Dict[str, Any]:
     coarse_type = fish_coral_result["primary_label"].lower() if fish_coral_result else None
 
@@ -76,25 +144,87 @@ def fuse_biological_results(
     all_labels = []
     note_parts = []
 
-    if yolo_result is not None:
-        selected_source = yolo_result["model_name"]
-        primary_label = yolo_result["primary_label"]
-        confidence = yolo_result["confidence"]
-        all_labels.extend(yolo_result.get("all_labels", []))
-        note_parts.append("YOLO result used as primary species prediction.")
+    yolo_primary_label = None
+    yolo_confidence = None
+    yolo_model_name = None
 
-    if bioclip2_result is not None and bioclip2_result.get("matches"):
-        bioclip_terms = [m["term"] for m in bioclip2_result["matches"]]
-        for t in bioclip_terms:
-            if t not in all_labels:
-                all_labels.append(t)
+    if yolo_result is not None:
+        yolo_model_name = yolo_result.get("model_name")
+        yolo_primary_label = yolo_result.get("primary_label")
+        yolo_confidence = yolo_result.get("confidence")
+
+    bioclip_primary_term = None
+    bioclip_primary_name = None
+    bioclip_confidence = None
+    bioclip_terms = []
+
+    if bioclip2_result is not None:
+        if bioclip2_result.get("matches"):
+            bioclip_terms = [
+                m["term"] for m in bioclip2_result["matches"]
+                if isinstance(m, dict) and "term" in m
+            ]
+
+        primary_match = bioclip2_result.get("primary_match")
+        if isinstance(primary_match, dict):
+            bioclip_primary_term = primary_match.get("term")
+            bioclip_primary_name = extract_name_from_bioclip_term(bioclip_primary_term)
+
+        bioclip_confidence = bioclip2_result.get("confidence")
+
+    # all_labels 保留原始展示内容：先 YOLO，再补 BioCLIP 原始 term
+    if yolo_result is not None:
+        all_labels.extend(yolo_result.get("all_labels", []))
+
+    for t in bioclip_terms:
+        if t not in all_labels:
+            all_labels.append(t)
+
+    # 核心融合逻辑
+    # 1) YOLO 和 BioCLIP 都有：
+    #    - 如果 YOLO 标签出现在 BioCLIP topK（提取名字 + 归一化比较），用 YOLO
+    #    - 否则用 BioCLIP
+    # 2) 只有 YOLO：用 YOLO
+    # 3) 只有 BioCLIP：用 BioCLIP
+    # 4) 如果 BioCLIP 被选中且 primary_match 是信息链，则最终只取最后一个名字展示
+    if yolo_primary_label is not None and bioclip2_result is not None and bioclip_terms:
+        matched = yolo_label_in_bioclip_topk(
+            yolo_label=yolo_primary_label,
+            bioclip2_result=bioclip2_result,
+            topk=bioclip_match_topk,
+        )
+
+        if matched:
+            selected_source = yolo_model_name
+            primary_label = yolo_primary_label
+            confidence = yolo_confidence
+            note_parts.append(
+                f"YOLO label matched BioCLIP2 top{bioclip_match_topk} after normalized-name comparison; YOLO result selected."
+            )
+        else:
+            selected_source = "bioclip2"
+            primary_label = bioclip_primary_name
+            confidence = bioclip_confidence
+            note_parts.append(
+                f"YOLO label not found in BioCLIP2 top{bioclip_match_topk} after normalized-name comparison; BioCLIP2 result selected."
+            )
+
         note_parts.append("BioCLIP2 terms added as biological-chain support.")
 
-    if primary_label is None and bioclip2_result is not None and bioclip2_result.get("primary_match"):
+    elif yolo_primary_label is not None:
+        selected_source = yolo_model_name
+        primary_label = yolo_primary_label
+        confidence = yolo_confidence
+        note_parts.append("BioCLIP2 unavailable, YOLO result selected.")
+
+    elif bioclip_primary_name is not None:
         selected_source = "bioclip2"
-        primary_label = bioclip2_result["primary_match"]["term"]
-        confidence = bioclip2_result["confidence"]
+        primary_label = bioclip_primary_name
+        confidence = bioclip_confidence
         note_parts.append("YOLO unavailable, fallback to BioCLIP2 primary match.")
+
+    else:
+        note_parts.append("Neither YOLO nor BioCLIP2 produced a valid species prediction.")
 
     if coarse_type == "fish":
         image_type = "fish"
@@ -152,6 +282,24 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             "modules": modules,
         }
 
+    # ===== 改动1：bioclip2 提前到 router 前，无条件执行 =====
+    bioclip2_result = None
+    if (
+        settings.use_bioclip2
+        and state.bioclip2_model is not None
+        and state.bioclip2_text_features is not None
+    ):
+        bioclip2_result = predict_with_bioclip2(
+            image=image,
+            model=state.bioclip2_model,
+            preprocess=state.bioclip2_preprocess,
+            text_features=state.bioclip2_text_features,
+            terms=state.bioclip2_terms,
+            device=state.runtime_device,
+            topk=5,
+        )
+        modules["bioclip2"] = bioclip2_result
+
     router_result = run_router_classification(image_path)
     modules["router"] = router_result["router_module"]
 
@@ -167,6 +315,11 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
         )
         modules["sonar"] = result
 
+        # 可选：把 bioclip2 是否执行写进 note
+        note = "Sonar classification completed."
+        if bioclip2_result is not None:
+            note += " BioCLIP2 was also executed unconditionally."
+
         final_result = build_final_result(
             status="success",
             source="sonar_model",
@@ -175,7 +328,7 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             all_labels=result["all_labels"],
             confidence=result["confidence"],
             display_text=f"声纳图像识别：{result['primary_label']}",
-            note="Sonar classification completed.",
+            note=note,
         )
     else:
         fish_coral_result = predict_with_yolo_classifier(
@@ -206,23 +359,7 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             )
             modules["coral"] = yolo_species_result
 
-        bioclip2_result = None
-        if (
-            settings.use_bioclip2
-            and state.bioclip2_model is not None
-            and state.bioclip2_text_features is not None
-        ):
-            bioclip2_result = predict_with_bioclip2(
-                image=image,
-                model=state.bioclip2_model,
-                preprocess=state.bioclip2_preprocess,
-                text_features=state.bioclip2_text_features,
-                terms=state.bioclip2_terms,
-                device=state.runtime_device,
-                topk=5,
-            )
-            modules["bioclip2"] = bioclip2_result
-
+        # ===== 改动2：这里不再重复跑 bioclip2，直接复用上面结果 =====
         fusion_result = fuse_biological_results(
             fish_coral_result=fish_coral_result,
             yolo_result=yolo_species_result,
