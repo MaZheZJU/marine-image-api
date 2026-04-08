@@ -9,7 +9,7 @@ from PIL import Image
 
 from app.core.config import settings
 from app.core.state import state
-from app.services.bioclip2_service import predict_with_bioclip2
+from app.services.oceanclip_service import predict_with_oceanclip
 from app.services.classifiers import predict_with_yolo_classifier, predict_with_yolo_detector
 from app.services.retrieval import run_faiss_query
 from app.services.router import run_router_classification
@@ -33,10 +33,10 @@ def build_default_modules() -> Dict[str, Any]:
         "retrieval": None,
         "router": None,
         "sonar": None,
-        "fish_coral_classifier": None,
+        "fish_coral": None,
         "fish": None,
         "coral": None,
-        "bioclip2": None,
+        "oceanclip": None,
         "fusion": None,
     }
 
@@ -62,21 +62,8 @@ def build_final_result(
         "note": note,
     }
 
-def normalize_compare_label(label: Optional[str]) -> str:
-    if not label:
-        return ""
-    return str(label).strip().lower().replace(" ", "")
-
 
 def extract_name_from_bioclip_term(term: Optional[str]) -> str:
-    """
-    BioCLIP term 可能是：
-    1) 纯名字: "Colpophyllia Natans"
-    2) 生物链: "Animalia > ... > Colpophyllia natans"
-
-    这里统一提取“最后一个名字”用于比较；
-    如果本身就是纯名字，则直接返回原值。
-    """
     if not term:
         return ""
 
@@ -92,159 +79,290 @@ def extract_name_from_bioclip_term(term: Optional[str]) -> str:
     return s
 
 
-def get_bioclip_topk_matches(
-    bioclip2_result: Optional[Dict[str, Any]],
-    topk: int = 5,
-) -> List[Dict[str, Any]]:
-    if not bioclip2_result:
-        return []
-
-    matches = bioclip2_result.get("matches") or []
-    if not isinstance(matches, list):
-        return []
-
-    return matches[:topk]
+def _normalize_label(label: str) -> str:
+    if not label:
+        return ""
+    return label.strip().lower().replace("_", " ").replace("  ", " ")
 
 
-def yolo_label_in_bioclip_topk(
-    yolo_label: Optional[str],
-    bioclip2_result: Optional[Dict[str, Any]],
-    topk: int = 5,
-) -> bool:
-    yolo_norm = normalize_compare_label(yolo_label)
-    if not yolo_norm:
+def _labels_match(detector_label: str, oceanclip_term: str) -> bool:
+    d = _normalize_label(detector_label)
+    o = _normalize_label(extract_name_from_bioclip_term(oceanclip_term))
+    if not d or not o:
         return False
+    if d == o:
+        return True
+    d_genus = d.split()[0] if d.split() else ""
+    o_genus = o.split()[0] if o.split() else ""
+    return bool(d_genus and o_genus and d_genus == o_genus)
 
-    top_matches = get_bioclip_topk_matches(bioclip2_result, topk=topk)
 
-    for m in top_matches:
-        if not isinstance(m, dict):
-            continue
-
-        term = m.get("term")
-        bioclip_name = extract_name_from_bioclip_term(term)
-        bioclip_norm = normalize_compare_label(bioclip_name)
-
-        if yolo_norm == bioclip_norm:
-            return True
-
-    return False
-
-def fuse_biological_results(
-    fish_coral_result: Dict[str, Any],
-    yolo_result: Optional[Dict[str, Any]],
-    bioclip2_result: Optional[Dict[str, Any]],
-    bioclip_match_topk: int = 5,
-) -> Dict[str, Any]:
-    coarse_type = fish_coral_result["primary_label"].lower() if fish_coral_result else None
-
-    selected_source = None
-    primary_label = None
-    confidence = None
-    all_labels = []
-    note_parts = []
-
-    yolo_primary_label = None
-    yolo_confidence = None
-    yolo_model_name = None
-
-    if yolo_result is not None:
-        yolo_model_name = yolo_result.get("model_name")
-        yolo_primary_label = yolo_result.get("primary_label")
-        yolo_confidence = yolo_result.get("confidence")
-
-    bioclip_primary_term = None
-    bioclip_primary_name = None
-    bioclip_confidence = None
-    bioclip_terms = []
-
-    if bioclip2_result is not None:
-        if bioclip2_result.get("matches"):
-            bioclip_terms = [
-                m["term"] for m in bioclip2_result["matches"]
-                if isinstance(m, dict) and "term" in m
-            ]
-
-        primary_match = bioclip2_result.get("primary_match")
-        if isinstance(primary_match, dict):
-            bioclip_primary_term = primary_match.get("term")
-            bioclip_primary_name = extract_name_from_bioclip_term(bioclip_primary_term)
-
-        bioclip_confidence = bioclip2_result.get("confidence")
-
-    # all_labels 保留原始展示内容：先 YOLO，再补 BioCLIP 原始 term
-    if yolo_result is not None:
-        all_labels.extend(yolo_result.get("all_labels", []))
-
-    for t in bioclip_terms:
-        if t not in all_labels:
-            all_labels.append(t)
-
-    # 核心融合逻辑
-    # 1) YOLO 和 BioCLIP 都有：
-    #    - 如果 YOLO 标签出现在 BioCLIP topK（提取名字 + 归一化比较），用 YOLO
-    #    - 否则用 BioCLIP
-    # 2) 只有 YOLO：用 YOLO
-    # 3) 只有 BioCLIP：用 BioCLIP
-    # 4) 如果 BioCLIP 被选中且 primary_match 是信息链，则最终只取最后一个名字展示
-    if yolo_primary_label is not None and bioclip2_result is not None and bioclip_terms:
-        matched = yolo_label_in_bioclip_topk(
-            yolo_label=yolo_primary_label,
-            bioclip2_result=bioclip2_result,
-            topk=bioclip_match_topk,
-        )
-
-        if matched:
-            selected_source = yolo_model_name
-            primary_label = yolo_primary_label
-            confidence = yolo_confidence
-            note_parts.append(
-                f"YOLO label matched BioCLIP2 top{bioclip_match_topk} after normalized-name comparison; YOLO result selected."
-            )
-        else:
-            selected_source = "bioclip2"
-            primary_label = bioclip_primary_name
-            confidence = bioclip_confidence
-            note_parts.append(
-                f"YOLO label not found in BioCLIP2 top{bioclip_match_topk} after normalized-name comparison; BioCLIP2 result selected."
-            )
-
-        note_parts.append("BioCLIP2 terms added as biological-chain support.")
-
-    elif yolo_primary_label is not None:
-        selected_source = yolo_model_name
-        primary_label = yolo_primary_label
-        confidence = yolo_confidence
-        note_parts.append("BioCLIP2 unavailable, YOLO result selected.")
-
-    elif bioclip_primary_name is not None:
-        selected_source = "bioclip2"
-        primary_label = bioclip_primary_name
-        confidence = bioclip_confidence
-        note_parts.append("YOLO unavailable, fallback to BioCLIP2 primary match.")
-
-    else:
-        note_parts.append("Neither YOLO nor BioCLIP2 produced a valid species prediction.")
-
-    if coarse_type == "fish":
-        image_type = "fish"
-    elif coarse_type == "coral":
-        image_type = "coral"
-    else:
-        image_type = "biological_unknown"
-
-    display_text = f"生物识别结果：{primary_label}" if primary_label else "生物识别结果：未确定"
+def build_candidate(
+    source: str,
+    image_type: str,
+    primary_label: Optional[str],
+    all_labels: Optional[List[str]],
+    confidence: Optional[float],
+    note: str,
+) -> Optional[Dict[str, Any]]:
+    if not primary_label:
+        return None
 
     return {
-        "enabled": True,
-        "coarse_type": coarse_type,
-        "selected_source": selected_source,
-        "primary_label": primary_label,
-        "confidence": confidence,
-        "all_labels": all_labels,
-        "reason": " ".join(note_parts),
-        "display_text": display_text,
+        "source": source,
         "image_type": image_type,
+        "primary_label": primary_label,
+        "all_labels": all_labels or [],
+        "confidence": float(confidence) if confidence is not None else 0.0,
+        "note": note,
+    }
+
+
+def build_sonar_candidate(sonar_result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not sonar_result:
+        return None
+
+    return build_candidate(
+        source="sonar_model",
+        image_type="sonar",
+        primary_label=sonar_result.get("primary_label"),
+        all_labels=sonar_result.get("all_labels"),
+        confidence=sonar_result.get("confidence"),
+        note="Candidate from sonar YOLO classifier.",
+    )
+
+
+def build_fish_candidate(fish_result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not fish_result:
+        return None
+
+    return build_candidate(
+        source=fish_result.get("model_name", "fish_model"),
+        image_type="fish",
+        primary_label=fish_result.get("primary_label"),
+        all_labels=fish_result.get("all_labels"),
+        confidence=fish_result.get("confidence"),
+        note="Candidate from fish YOLO detector.",
+    )
+
+
+def build_coral_candidate(coral_result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not coral_result:
+        return None
+
+    return build_candidate(
+        source=coral_result.get("model_name", "coral_model"),
+        image_type="coral",
+        primary_label=coral_result.get("primary_label"),
+        all_labels=coral_result.get("all_labels"),
+        confidence=coral_result.get("confidence"),
+        note="Candidate from coral YOLO detector.",
+    )
+
+
+def build_oceanclip_candidate(oceanclip_result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not oceanclip_result:
+        return None
+
+    primary_match = oceanclip_result.get("primary_match")
+    if not isinstance(primary_match, dict):
+        return None
+
+    primary_term = primary_match.get("term")
+    primary_label = extract_name_from_bioclip_term(primary_term)
+
+    matches = oceanclip_result.get("matches") or []
+    all_labels = []
+    for m in matches:
+        if isinstance(m, dict) and "term" in m:
+            all_labels.append(m["term"])
+
+    return build_candidate(
+        source="oceanclip",
+        image_type="biological",
+        primary_label=primary_label,
+        all_labels=all_labels,
+        confidence=oceanclip_result.get("confidence"),
+        note="Candidate from OceanCLIP.",
+    )
+
+
+def fuse_by_highest_confidence(candidates: List[Optional[Dict[str, Any]]]) -> Dict[str, Any]:
+    valid_candidates = [c for c in candidates if c is not None and c.get("primary_label")]
+
+    if not valid_candidates:
+        return {
+            "selected_source": None,
+            "image_type": "unknown",
+            "primary_label": None,
+            "confidence": None,
+            "all_labels": [],
+            "reason": "No valid prediction candidate was produced.",
+            "display_text": "Result: Undetermined",
+            "candidates": [],
+            "domain_decision": "unknown",
+        }
+
+    best = max(valid_candidates, key=lambda x: x.get("confidence", 0.0))
+
+    merged_labels = []
+    for c in valid_candidates:
+        for label in c.get("all_labels", []):
+            if label not in merged_labels:
+                merged_labels.append(label)
+
+    return {
+        "selected_source": best["source"],
+        "image_type": best["image_type"],
+        "primary_label": best["primary_label"],
+        "confidence": best["confidence"],
+        "all_labels": merged_labels,
+        "reason": (
+            f"Selected candidate with highest confidence: "
+            f"source={best['source']}, label={best['primary_label']}, confidence={best['confidence']:.4f}."
+        ),
+        "display_text": f"Result: {best['primary_label']}",
+        "candidates": valid_candidates,
+        "domain_decision": "unknown_fallback",
+    }
+
+
+def fuse_sonar(sonar_result: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    candidate = build_sonar_candidate(sonar_result)
+    if not candidate:
+        return {
+            "selected_source": None,
+            "image_type": "sonar",
+            "primary_label": None,
+            "confidence": None,
+            "all_labels": [],
+            "reason": "Router predicted sonar but sonar model produced no result.",
+            "display_text": "Result: Undetermined",
+            "candidates": [],
+            "domain_decision": "sonar",
+        }
+
+    return {
+        "selected_source": candidate["source"],
+        "image_type": "sonar",
+        "primary_label": candidate["primary_label"],
+        "confidence": candidate["confidence"],
+        "all_labels": candidate["all_labels"],
+        "reason": (
+            f"Router predicted sonar. Sonar classifier: "
+            f"label={candidate['primary_label']}, confidence={candidate['confidence']:.4f}."
+        ),
+        "display_text": f"Result: {candidate['primary_label']}",
+        "candidates": [candidate],
+        "domain_decision": "sonar",
+    }
+
+
+def _determine_bio_image_type(
+    fish_coral_result: Optional[Dict[str, Any]],
+    oceanclip_result: Optional[Dict[str, Any]],
+) -> str:
+    if fish_coral_result and fish_coral_result.get("primary_label") in ("fish", "coral"):
+        return fish_coral_result["primary_label"]
+    if oceanclip_result:
+        if oceanclip_result.get("is_fish"):
+            return "fish"
+        if oceanclip_result.get("is_coral"):
+            return "coral"
+    return "biological"
+
+
+def fuse_biological(
+    fish_result: Optional[Dict[str, Any]],
+    coral_result: Optional[Dict[str, Any]],
+    oceanclip_result: Optional[Dict[str, Any]],
+    fish_coral_result: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    image_type = _determine_bio_image_type(fish_coral_result, oceanclip_result)
+
+    detector_candidate = None
+    if image_type == "fish":
+        detector_candidate = build_fish_candidate(fish_result)
+    elif image_type == "coral":
+        detector_candidate = build_coral_candidate(coral_result)
+
+    oceanclip_candidate = build_oceanclip_candidate(oceanclip_result)
+
+    # Cross-validate detector and OceanCLIP: check if the detector's label
+    # matches any of OceanCLIP's top terms (genus-level or exact match).
+    matched_term = None
+    if detector_candidate and oceanclip_result:
+        det_label = detector_candidate["primary_label"]
+        for match in oceanclip_result.get("matches", []):
+            if isinstance(match, dict) and match.get("term"):
+                if _labels_match(det_label, match["term"]):
+                    matched_term = match["term"]
+                    break
+
+    if oceanclip_candidate:
+        if matched_term:
+            best = {
+                "source": "oceanclip+detector",
+                "image_type": image_type,
+                "primary_label": matched_term,
+                "confidence": oceanclip_candidate["confidence"],
+            }
+            reason = (
+                f"Biological domain. Detector and OceanCLIP agree: "
+                f"detector={detector_candidate['primary_label']}, "
+                f"OceanCLIP match={matched_term}, "
+                f"similarity={oceanclip_candidate['confidence']:.4f}."
+            )
+        else:
+            best = oceanclip_candidate
+            reason = (
+                f"Biological domain. OceanCLIP selected as primary: "
+                f"label={best['primary_label']}, similarity={best['confidence']:.4f}."
+            )
+    elif detector_candidate and (detector_candidate.get("confidence") or 0.0) >= 0.5:
+        best = detector_candidate
+        reason = (
+            f"Biological domain. Detector selected (OceanCLIP unavailable): "
+            f"source={best['source']}, label={best['primary_label']}, confidence={best['confidence']:.4f}."
+        )
+    elif detector_candidate:
+        best = detector_candidate
+        reason = (
+            f"Biological domain. Detector selected (low confidence, OceanCLIP unavailable): "
+            f"source={best['source']}, label={best['primary_label']}, confidence={best['confidence']:.4f}."
+        )
+    else:
+        return {
+            "selected_source": None,
+            "image_type": image_type,
+            "primary_label": None,
+            "confidence": None,
+            "all_labels": [],
+            "reason": "Biological domain but no valid candidate produced.",
+            "display_text": "Result: Undetermined",
+            "candidates": [],
+            "domain_decision": "biological",
+        }
+
+    candidates = [c for c in [detector_candidate, oceanclip_candidate] if c is not None]
+    merged_labels: List[str] = []
+    for c in candidates:
+        for label in c.get("all_labels", []):
+            if label not in merged_labels:
+                merged_labels.append(label)
+
+    final_label = best["primary_label"]
+
+    return {
+        "selected_source": best["source"],
+        "image_type": image_type,
+        "primary_label": final_label,
+        "confidence": best["confidence"],
+        "all_labels": merged_labels,
+        "reason": reason,
+        "display_text": f"Result: {final_label}",
+        "candidates": candidates,
+        "domain_decision": "biological",
     }
 
 
@@ -271,7 +389,7 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             primary_label=primary_label,
             all_labels=labels,
             confidence=confidence,
-            display_text=f"识别结果：{primary_label}",
+            display_text=f"Result: {primary_label}",
             note="Matched from retrieval database.",
         )
 
@@ -282,54 +400,41 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             "modules": modules,
         }
 
-    # ===== 改动1：bioclip2 提前到 router 前，无条件执行 =====
-    bioclip2_result = None
-    if (
-        settings.use_bioclip2
-        and state.bioclip2_model is not None
-        and state.bioclip2_text_features is not None
-    ):
-        bioclip2_result = predict_with_bioclip2(
-            image=image,
-            model=state.bioclip2_model,
-            preprocess=state.bioclip2_preprocess,
-            text_features=state.bioclip2_text_features,
-            terms=state.bioclip2_terms,
-            device=state.runtime_device,
-            topk=5,
-        )
-        modules["bioclip2"] = bioclip2_result
-
+    oceanclip_result = None
     router_result = run_router_classification(image_path)
     modules["router"] = router_result["router_module"]
 
-    image_type = router_result["predicted_type"]
-    stage = router_result["stage"]
+    if (
+        settings.use_oceanclip
+        and state.oceanclip_model is not None
+        and state.oceanclip_text_features is not None
+    ):
+        oceanclip_result = predict_with_oceanclip(
+            image=image,
+            model=state.oceanclip_model,
+            preprocess=state.oceanclip_preprocess,
+            text_features=state.oceanclip_text_features,
+            terms=state.oceanclip_terms,
+            device=state.runtime_device,
+            topk=5,
+        )
+        modules["oceanclip"] = oceanclip_result
 
-    if image_type == "sonar":
-        result = predict_with_yolo_classifier(
+    router_predicted_type = router_result.get("predicted_type", "unknown")
+
+    sonar_result = None
+    fish_result = None
+    coral_result = None
+    fish_coral_result = None
+
+    if router_predicted_type == "sonar":
+        sonar_result = predict_with_yolo_classifier(
             state.sonar_model,
             image,
             state.runtime_device,
             "MergedData_7",
         )
-        modules["sonar"] = result
-
-        # 可选：把 bioclip2 是否执行写进 note
-        note = "Sonar classification completed."
-        if bioclip2_result is not None:
-            note += " BioCLIP2 was also executed unconditionally."
-
-        final_result = build_final_result(
-            status="success",
-            source="sonar_model",
-            image_type="sonar",
-            primary_label=result["primary_label"],
-            all_labels=result["all_labels"],
-            confidence=result["confidence"],
-            display_text=f"声纳图像识别：{result['primary_label']}",
-            note=note,
-        )
+        modules["sonar"] = sonar_result
     else:
         fish_coral_result = predict_with_yolo_classifier(
             state.fish_coral_model,
@@ -337,52 +442,53 @@ def run_full_pipeline(image_path: Path) -> Dict[str, Any]:
             state.runtime_device,
             "fish_coral_cls",
         )
-        modules["fish_coral_classifier"] = fish_coral_result
+        modules["fish_coral"] = fish_coral_result
 
-        coarse_label = fish_coral_result["primary_label"].lower()
-        yolo_species_result = None
+        bio_subtype = fish_coral_result.get("primary_label", "fish")
 
-        if coarse_label == "fish":
-            yolo_species_result = predict_with_yolo_detector(
+        if bio_subtype == "fish":
+            fish_result = predict_with_yolo_detector(
                 state.fish_model,
                 image,
                 state.runtime_device,
                 "merge_fish_small",
             )
-            modules["fish"] = yolo_species_result
+            modules["fish"] = fish_result
         else:
-            yolo_species_result = predict_with_yolo_detector(
+            coral_result = predict_with_yolo_detector(
                 state.coral_model,
                 image,
                 state.runtime_device,
                 "Coral_one2",
             )
-            modules["coral"] = yolo_species_result
+            modules["coral"] = coral_result
 
-        # ===== 改动2：这里不再重复跑 bioclip2，直接复用上面结果 =====
-        fusion_result = fuse_biological_results(
-            fish_coral_result=fish_coral_result,
-            yolo_result=yolo_species_result,
-            bioclip2_result=bioclip2_result,
-        )
-        modules["fusion"] = fusion_result
-
-        final_result = build_final_result(
-            status="success",
-            source=fusion_result["selected_source"],
-            image_type=fusion_result["image_type"],
-            primary_label=fusion_result["primary_label"],
-            all_labels=fusion_result["all_labels"],
-            confidence=fusion_result["confidence"],
-            display_text=fusion_result["display_text"],
-            note=fusion_result["reason"],
+    if router_predicted_type == "sonar":
+        fusion_result = fuse_sonar(sonar_result)
+    else:
+        fusion_result = fuse_biological(
+            fish_result,
+            coral_result,
+            oceanclip_result,
+            fish_coral_result,
         )
 
-        stage = "bio_fused"
+    modules["fusion"] = fusion_result
+
+    final_result = build_final_result(
+        status="success",
+        source=fusion_result["selected_source"],
+        image_type=fusion_result["image_type"],
+        primary_label=fusion_result["primary_label"],
+        all_labels=fusion_result["all_labels"],
+        confidence=fusion_result["confidence"],
+        display_text=fusion_result["display_text"],
+        note=fusion_result["reason"],
+    )
 
     return {
         "success": True,
-        "stage": stage,
+        "stage": "multi_model_fused",
         "final_result": final_result,
         "modules": modules,
     }

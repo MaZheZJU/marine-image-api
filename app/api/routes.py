@@ -24,7 +24,6 @@ def health():
         state.id2meta is not None,
         state.runtime_device is not None,
         state.router_model is not None,
-        state.router_transform is not None,
         state.sonar_model is not None,
         state.fish_coral_model is not None,
         state.fish_model is not None,
@@ -39,14 +38,13 @@ def health():
         "ready": ready,
         "router_model_loaded": state.router_model is not None,
         "router_classes": state.router_class_names,
-        "router_sonar_index": state.router_sonar_index,
         "sonar_model_loaded": state.sonar_model is not None,
         "fish_coral_model_loaded": state.fish_coral_model is not None,
         "fish_model_loaded": state.fish_model is not None,
         "coral_model_loaded": state.coral_model is not None,
-        "bioclip2_loaded": state.bioclip2_model is not None,
-        "bioclip2_terms_count": len(state.bioclip2_terms) if state.bioclip2_terms else 0,
-        "use_bioclip2": settings.use_bioclip2,
+        "oceanclip_loaded": state.oceanclip_model is not None,
+        "oceanclip_terms_count": len(state.oceanclip_terms) if state.oceanclip_terms else 0,
+        "use_oceanclip": settings.use_oceanclip,
     }
 
 

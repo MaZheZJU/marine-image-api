@@ -1,58 +1,48 @@
+"""
+Router binary classifier: sonar vs biological.
+Uses YOLOv11-cls model (ultralytics).
+"""
+
 from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict
 
-import numpy as np
-import torch
-from PIL import Image
+from ultralytics import YOLO
 
 from app.core.config import settings
 from app.core.state import state
 
-settings.ensure_yolov5_path()
 
-from models.experimental import attempt_load  # noqa: E402
-from utils.augmentations import classify_transforms  # noqa: E402
-
-
-def _find_sonar_index(names_map: dict) -> int:
-    for idx, name in names_map.items():
-        if str(name).strip().lower() == "sonar":
-            return int(idx)
-    return 0
+def load_router_model(model_path: str):
+    """Load the router model, returning the YOLO instance and class mapping."""
+    model = YOLO(model_path)
+    class_names = model.names  # {0: 'bio', 1: 'sonar'}
+    return model, class_names
 
 
-def load_router_model(device: str):
-    model = attempt_load(settings.router_model_path, device=device)
-    model.eval()
-    class_names = model.names
-    sonar_index = _find_sonar_index(class_names)
-    transform = classify_transforms(224)
-    return model, class_names, sonar_index, transform
-
-
-@torch.no_grad()
 def run_router_classification(image_path: Path) -> Dict[str, Any]:
-    if state.router_model is None or state.router_transform is None or state.runtime_device is None:
-        raise RuntimeError("Router model not initialized correctly")
+    """Classify a single image as sonar or biological."""
+    if state.router_model is None:
+        raise RuntimeError("Router model not initialized")
 
-    img_pil = Image.open(image_path).convert("RGB")
-    im = np.array(img_pil)[:, :, ::-1].copy()
-    img_tensor = state.router_transform(im).unsqueeze(0).to(state.runtime_device)
+    results = state.router_model.predict(str(image_path), verbose=False)
+    probs = results[0].probs
 
-    out = state.router_model(img_tensor)
-    logits = out[0] if isinstance(out, (list, tuple)) else out
-    probs = torch.softmax(logits, dim=1).squeeze(0)
+    sonar_idx = None
+    for idx, name in state.router_class_names.items():
+        if name == "sonar":
+            sonar_idx = idx
+            break
+    if sonar_idx is None:
+        raise RuntimeError("Router model has no 'sonar' class")
 
-    top1_prob, top1_idx = torch.max(probs, dim=0)
-    top1_prob = float(top1_prob.item())
-    top1_idx = int(top1_idx.item())
-
-    sonar_prob = float(probs[state.router_sonar_index].item())
+    sonar_prob = float(probs.data[sonar_idx].item())
     is_sonar = sonar_prob >= settings.router_threshold
 
-    top1_label_raw = str(state.router_class_names.get(top1_idx, str(top1_idx)))
+    top1_idx = int(probs.top1)
+    top1_prob = float(probs.top1conf.item())
+    top1_label = state.router_class_names.get(top1_idx, str(top1_idx))
 
     predicted_type = "sonar" if is_sonar else "biological"
     stage = "sonar_routed" if is_sonar else "bio_routed"
@@ -61,8 +51,8 @@ def run_router_classification(image_path: Path) -> Dict[str, Any]:
         "enabled": True,
         "predicted_type": predicted_type,
         "confidence": round(sonar_prob if is_sonar else (1.0 - sonar_prob), 4),
-        "model_name": Path(settings.router_model_path).name,
-        "raw_top1_label": top1_label_raw,
+        "model_name": "yolo11n-cls",
+        "raw_top1_label": top1_label,
         "raw_top1_confidence": round(top1_prob, 4),
         "sonar_probability": round(sonar_prob, 4),
         "threshold": settings.router_threshold,

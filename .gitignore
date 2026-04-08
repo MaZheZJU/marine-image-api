@@ -25,3 +25,7 @@ artifacts/
 tmp/
 temp/
 .ipynb_checkpoints/
+
+outputs/
+runs/
+.claude/

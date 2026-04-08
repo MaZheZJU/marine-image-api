@@ -138,6 +138,7 @@ pysocks=1.7.1=py39h06a4308_1
 python=3.9.25=h0dcde21_1
 python-dateutil=2.9.0.post0=pypi_0
 python-multipart=0.0.20=pypi_0
+python-dotenv=1.2.1=pypi_0
 pytorch-mutex=1.0=cpu
 pytz=2025.2=pypi_0
 pyyaml=6.0.1=pypi_0

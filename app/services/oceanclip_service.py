@@ -7,34 +7,34 @@ import torch
 from PIL import Image
 
 
-def load_bioclip2_model(checkpoint_path: str, device: str):
+def load_oceanclip_model(checkpoint_path: str, device: str):
     try:
         import open_clip
 
-        print(f"[BioCLIP2] Loading model from {checkpoint_path} using standard open_clip")
+        print(f"[OceanCLIP] Loading model from {checkpoint_path} using standard open_clip")
         model, _, preprocess = open_clip.create_model_and_transforms("ViT-B-16", pretrained=False)
 
-        print("[BioCLIP2] Loading checkpoint...")
+        print("[OceanCLIP] Loading checkpoint...")
         checkpoint = torch.load(checkpoint_path, map_location=device)
-        print(f"[BioCLIP2] Checkpoint loaded, type: {type(checkpoint)}")
+        print(f"[OceanCLIP] Checkpoint loaded, type: {type(checkpoint)}")
 
         if "state_dict" in checkpoint:
-            print("[BioCLIP2] Loading from 'state_dict' key")
+            print("[OceanCLIP] Loading from 'state_dict' key")
             model.load_state_dict(checkpoint["state_dict"])
         elif "model_state_dict" in checkpoint:
-            print("[BioCLIP2] Loading from 'model_state_dict' key")
+            print("[OceanCLIP] Loading from 'model_state_dict' key")
             model.load_state_dict(checkpoint["model_state_dict"])
         else:
-            print("[BioCLIP2] Loading checkpoint as direct state_dict")
+            print("[OceanCLIP] Loading checkpoint as direct state_dict")
             model.load_state_dict(checkpoint)
 
         model = model.to(device).eval()
-        print("[BioCLIP2] Model loaded successfully")
+        print("[OceanCLIP] Model loaded successfully")
 
         return model, preprocess, open_clip.tokenize
 
     except Exception as e:
-        print(f"\n[BioCLIP2] Error loading model: {e}")
+        print(f"\n[OceanCLIP] Error loading model: {e}")
         import traceback
         traceback.print_exc()
         raise
@@ -58,7 +58,7 @@ def get_default_terms() -> List[str]:
 
 def load_terms_from_txt(terms_path: str, max_terms: int = 1000) -> List[str]:
     if not os.path.exists(terms_path):
-        print(f"[BioCLIP2] Terms file not found: {terms_path}, using default terms")
+        print(f"[OceanCLIP] Terms file not found: {terms_path}, using default terms")
         return get_default_terms()
 
     terms: List[str] = []
@@ -76,14 +76,14 @@ def load_terms_from_txt(terms_path: str, max_terms: int = 1000) -> List[str]:
                 break
 
     if not terms:
-        print("[BioCLIP2] Terms file is empty, using default terms")
+        print("[OceanCLIP] Terms file is empty, using default terms")
         return get_default_terms()
 
-    print(f"[BioCLIP2] Loaded {len(terms)} terms from {terms_path}")
+    print(f"[OceanCLIP] Loaded {len(terms)} terms from {terms_path}")
     return terms
 
 
-def load_bioclip2_text_features(model, terms: List[str], device: str):
+def load_oceanclip_text_features(model, terms: List[str], device: str):
     import open_clip
 
     text_tokens = open_clip.tokenize(terms).to(device)
@@ -94,7 +94,7 @@ def load_bioclip2_text_features(model, terms: List[str], device: str):
 
 
 @torch.no_grad()
-def predict_with_bioclip2(
+def predict_with_oceanclip(
     image: Image.Image,
     model,
     preprocess,
@@ -148,7 +148,7 @@ def predict_with_bioclip2(
                 break
 
     return {
-        "model_type": "bioclip2",
+        "model_type": "oceanclip",
         "matches": matches,
         "primary_match": matches[0] if matches else None,
         "is_fish": is_fish,

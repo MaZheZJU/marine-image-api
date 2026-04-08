@@ -9,8 +9,6 @@ from PIL import Image
 
 from app.core.config import settings
 
-settings.ensure_yolov5_path()
-
 from utils.augmentations import classify_transforms, letterbox  # noqa: E402
 from utils.general import non_max_suppression  # noqa: E402
 

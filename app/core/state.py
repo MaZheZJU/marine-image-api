@@ -14,20 +14,18 @@ class AppState:
     runtime_device: Optional[str] = None
 
     router_model: Any = None
-    router_class_names: Dict[int, str] = field(default_factory=dict)
-    router_sonar_index: int = 0
-    router_transform: Any = None
+    router_class_names: dict = field(default_factory=dict)  # {0: 'bio', 1: 'sonar'}
 
     sonar_model: Any = None
     fish_coral_model: Any = None
     fish_model: Any = None
     coral_model: Any = None
 
-    bioclip2_model: Any = None
-    bioclip2_preprocess: Any = None
-    bioclip2_tokenizer: Any = None
-    bioclip2_text_features: Any = None
-    bioclip2_terms: List[str] = field(default_factory=list)
+    oceanclip_model: Any = None
+    oceanclip_preprocess: Any = None
+    oceanclip_tokenizer: Any = None
+    oceanclip_text_features: Any = None
+    oceanclip_terms: List[str] = field(default_factory=list)
 
 
 state = AppState()

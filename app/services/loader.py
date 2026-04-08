@@ -4,26 +4,23 @@ import os
 
 from app.core.config import settings
 from app.core.state import state
-from app.services.bioclip2_service import (
-    load_bioclip2_model,
-    load_bioclip2_text_features,
+from app.services.oceanclip_service import (
+    load_oceanclip_model,
+    load_oceanclip_text_features,
     load_terms_from_txt,
 )
 from app.services.retrieval import load_bioclip, load_index, load_metadata, resolve_device
 from app.services.router import load_router_model
 
-settings.ensure_yolov5_path()
 from models.experimental import attempt_load  # noqa: E402
 
 
 def load_all_resources() -> None:
-    """
-    启动时一次性加载所有模型、索引和元数据到 state。
-    """
+    """Load all models, indices, and metadata into state at startup."""
     state.runtime_device = resolve_device(settings.device)
     print(f"[Startup] Using device: {state.runtime_device}")
 
-    # 1. Retrieval 模块
+    # 1. Retrieval module
     state.model, state.preprocess = load_bioclip(state.runtime_device)
     print("[Startup] BioCLIP retrieval model loaded.")
 
@@ -33,14 +30,9 @@ def load_all_resources() -> None:
     state.id2meta = load_metadata()
     print("[Startup] Metadata loaded.")
 
-    # 2. Router 模块
+    # 2. Router module
     print("[Startup] Loading router model...")
-    (
-        state.router_model,
-        state.router_class_names,
-        state.router_sonar_index,
-        state.router_transform,
-    ) = load_router_model(state.runtime_device)
+    state.router_model, state.router_class_names = load_router_model(settings.router_model_path)
     print(f"[Startup] Router model loaded. Classes: {state.router_class_names}")
 
     # 3. Sonar classifier
@@ -49,7 +41,7 @@ def load_all_resources() -> None:
     state.sonar_model.eval()
     print(f"[Startup] Sonar model loaded. Classes: {state.sonar_model.names}")
 
-    # 4. fish/coral 二分类
+    # 4. Fish/Coral binary classification
     print("[Startup] Loading fish/coral classifier...")
     state.fish_coral_model = attempt_load(settings.fish_coral_cls_path, device=state.runtime_device)
     state.fish_coral_model.eval()
@@ -67,44 +59,44 @@ def load_all_resources() -> None:
     state.coral_model.eval()
     print(f"[Startup] Coral model loaded. Classes: {state.coral_model.names}")
 
-    # 7. BioCLIP2（可选）
-    print("[Startup] Loading BioCLIP2 finetuned model...")
+    # 7. OceanCLIP (optional)
+    print("[Startup] Loading OceanCLIP finetuned model...")
     try:
         (
-            state.bioclip2_model,
-            state.bioclip2_preprocess,
-            state.bioclip2_tokenizer,
-        ) = load_bioclip2_model(settings.bioclip2_checkpoint, state.runtime_device)
+            state.oceanclip_model,
+            state.oceanclip_preprocess,
+            state.oceanclip_tokenizer,
+        ) = load_oceanclip_model(settings.oceanclip_checkpoint, state.runtime_device)
 
-        if state.bioclip2_model is not None:
-            print(f"[DEBUG] BIOCLIP2_TERMS_PATH = '{settings.bioclip2_terms_path}'")
-            print(f"[DEBUG] BIOCLIP2_TERMS_PATH type = {type(settings.bioclip2_terms_path)}")
-            print(f"[DEBUG] File exists: {os.path.exists(settings.bioclip2_terms_path)}")
+        if state.oceanclip_model is not None:
+            print(f"[DEBUG] OCEANCLIP_TERMS_PATH = '{settings.oceanclip_terms_path}'")
+            print(f"[DEBUG] OCEANCLIP_TERMS_PATH type = {type(settings.oceanclip_terms_path)}")
+            print(f"[DEBUG] File exists: {os.path.exists(settings.oceanclip_terms_path)}")
 
-            state.bioclip2_terms = load_terms_from_txt(
-                settings.bioclip2_terms_path,
+            state.oceanclip_terms = load_terms_from_txt(
+                settings.oceanclip_terms_path,
                 max_terms=1000,
             )
 
-            if state.bioclip2_terms:
+            if state.oceanclip_terms:
                 (
-                    state.bioclip2_text_features,
-                    state.bioclip2_terms,
-                ) = load_bioclip2_text_features(
-                    state.bioclip2_model,
-                    state.bioclip2_terms,
+                    state.oceanclip_text_features,
+                    state.oceanclip_terms,
+                ) = load_oceanclip_text_features(
+                    state.oceanclip_model,
+                    state.oceanclip_terms,
                     state.runtime_device,
                 )
-                print(f"[Startup] BioCLIP2 text features computed for {len(state.bioclip2_terms)} terms")
+                print(f"[Startup] OceanCLIP text features computed for {len(state.oceanclip_terms)} terms")
             else:
-                print("[Startup] Warning: No terms loaded for BioCLIP2")
+                print("[Startup] Warning: No terms loaded for OceanCLIP")
         else:
-            print("[Startup] Warning: BIOCLIP2_MODEL is None")
+            print("[Startup] Warning: OCEANCLIP_MODEL is None")
 
     except Exception as e:
-        print(f"[Startup] Warning: Failed to load BioCLIP2: {e}")
-        state.bioclip2_model = None
-        state.bioclip2_preprocess = None
-        state.bioclip2_tokenizer = None
-        state.bioclip2_text_features = None
-        state.bioclip2_terms = []
+        print(f"[Startup] Warning: Failed to load OceanCLIP: {e}")
+        state.oceanclip_model = None
+        state.oceanclip_preprocess = None
+        state.oceanclip_tokenizer = None
+        state.oceanclip_text_features = None
+        state.oceanclip_terms = []
